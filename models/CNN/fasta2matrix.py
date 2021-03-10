@@ -1,4 +1,4 @@
-#!/usr/bin/python3.7
+#!/usr/bin/env python3
 # FILE: fasta2matrix.py
 # AUTHOR: William Stafford Noble
 # CREATE DATE: 27 September 2005

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # FILE: trainCNN.py
 # AUTHOR: Duong Vu
 # CREATE DATE: 07 June 2019
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         model = create_model(nb_classes,input_length)
         traindata = traindata.reshape(traindata.shape + (1,))
         trainlabels_bin=utils.to_categorical(trainlabels, nb_classes)
-        model.fit(traindata, trainlabels_bin, epochs=10, batch_size=20, verbose = 2)
+        model.fit(traindata, trainlabels_bin, epochs=100, batch_size=20, verbose = 2)
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
         if modelname==None or modelname=="":
