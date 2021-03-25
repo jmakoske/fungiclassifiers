@@ -8,7 +8,7 @@ import sys
 import os, argparse
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dense, InputLayer
 from tensorflow.keras.layers import Convolution1D, MaxPooling1D
 from tensorflow.keras.layers import Dropout, Activation, Flatten
 from tensorflow.keras import utils
@@ -133,7 +133,9 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
 
 def create_model(nb_classes,input_length):
         model = Sequential()
-        model.add(Convolution1D(5,5, padding='valid', input_shape=(input_length, 1))) #input_dim
+        print('input_length=', input_length)
+        model.add(InputLayer(input_shape=(input_length, 1)))
+        model.add(Convolution1D(5,5, padding='valid')) #input_dim
         model.add(Activation('relu'))
         model.add(MaxPooling1D(pool_size=2,padding='valid'))
         model.add(Convolution1D(10, 5,padding='valid'))
@@ -148,6 +150,7 @@ def create_model(nb_classes,input_length):
         model.add(Dense(nb_classes))
         model.add(Activation('softmax'))
         model.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy'])
+        print(model.summary())
         return model
 
 def SaveConfig(configfilename,classifiername,fastafilename,jsonfilename,classificationfilename,classificationpos,kmer,data_max):
@@ -211,6 +214,7 @@ if __name__ == "__main__":
         model = create_model(nb_classes,input_length)
         traindata = traindata.reshape(traindata.shape + (1,))
         trainlabels_bin=utils.to_categorical(trainlabels, nb_classes)
+        print('Training data:', traindata.shape, trainlabels_bin.shape)
         model.fit(traindata, trainlabels_bin, epochs=10, batch_size=20, verbose = 2)
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
