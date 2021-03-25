@@ -215,7 +215,8 @@ if __name__ == "__main__":
         traindata = traindata.reshape(traindata.shape + (1,))
         trainlabels_bin=utils.to_categorical(trainlabels, nb_classes)
         print('Training data:', traindata.shape, trainlabels_bin.shape)
-        model.fit(traindata, trainlabels_bin, epochs=10, batch_size=20, verbose = 2)
+        model.fit(traindata, trainlabels_bin, validation_split=0.2,
+                  epochs=10, batch_size=20, verbose = 2)
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
         if modelname==None or modelname=="":
