@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # FILE: trainCNN.py
 # AUTHOR: Duong Vu
 # CREATE DATE: 07 June 2019
