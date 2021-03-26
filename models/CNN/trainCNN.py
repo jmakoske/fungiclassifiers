@@ -12,6 +12,7 @@ from tensorflow.keras.layers import Dense, InputLayer
 from tensorflow.keras.layers import Convolution1D, MaxPooling1D
 from tensorflow.keras.layers import Dropout, Activation, Flatten
 from tensorflow.keras import utils
+from tensorflow.keras import backend as K
 import numpy as np
 import json
 
@@ -131,6 +132,20 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
         #X = X/data_max
         return X,Y,len(classes),len(X[0]),data_max,seqIDList,seqList
 
+def multi_mcc(y_true, y_pred):
+        confusion_m = tf.matmul(K.transpose(y_true), y_pred)
+
+        N = K.sum(confusion_m)
+
+        up = N*tf.linalg.trace(confusion_m) - K.sum(tf.matmul(confusion_m, confusion_m))
+        down_left = K.sqrt(N**2 - K.sum(tf.matmul(confusion_m, K.transpose(confusion_m))))
+        down_right = K.sqrt(N**2 - K.sum(tf.matmul(K.transpose(confusion_m), confusion_m)))
+        
+        mcc = up / (down_left * down_right + K.epsilon())
+        mcc = tf.where(tf.math.is_nan(mcc), tf.zeros_like(mcc), mcc)
+
+        return K.mean(mcc)
+                
 def create_model(nb_classes,input_length):
         model = Sequential()
         print('input_length=', input_length)
@@ -149,7 +164,8 @@ def create_model(nb_classes,input_length):
         model.add(Dropout(0.5))
         model.add(Dense(nb_classes))
         model.add(Activation('softmax'))
-        model.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy'])
+        model.compile(optimizer='adam', loss='categorical_crossentropy',
+                      metrics=['accuracy', multi_mcc])
         print(model.summary())
         return model
 
@@ -214,7 +230,7 @@ if __name__ == "__main__":
         model = create_model(nb_classes,input_length)
         traindata = traindata.reshape(traindata.shape + (1,))
         trainlabels_bin=utils.to_categorical(trainlabels, nb_classes)
-        print('Training data:', traindata.shape, trainlabels_bin.shape)
+        print('Training data: X:', traindata.shape, 'Y:', trainlabels_bin.shape, 'actual classes:', len(np.unique(trainlabels)))
         model.fit(traindata, trainlabels_bin, validation_split=0.2,
                   epochs=10, batch_size=20, verbose = 2)
         #save model
