@@ -555,7 +555,7 @@ vett=np.zeros(len(kmer_list),dtype=int)
 while (id != ""):
 
   # Tell the user what's happening.
-  if (i_sequence % 1000 == 0):
+  if (i_sequence % 5000 == 0):
     sys.stdout.write("Reading %dth sequenza.\n" % i_sequence)
 
   # Compute the sequence vector.
