@@ -13,9 +13,12 @@ from tensorflow.keras.layers import Convolution1D, MaxPooling1D
 from tensorflow.keras.layers import Dropout, Activation, Flatten
 from tensorflow.keras import utils
 from tensorflow.keras import backend as K
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score as acc
+from sklearn.metrics import matthews_corrcoef as mcc
 import numpy as np
 import json
-
+import time
 
 parser=argparse.ArgumentParser(prog='trainCNN.py', 
                                                            usage="%(prog)s [options] -i fastafile -c classificationfile -p classificationposition",
@@ -48,9 +51,11 @@ def GetBase(filename):
                 
 def load_data(fastafilename,classificationfilename,classificationlevel):
         #load classification
-        allseqids=[]
+        #allseqids=[]
+        print('  Reading', classificationfilename)
         records= open(classificationfilename, encoding = "ISO-8859-1")
         classification=[]
+        classificationdict={}
         level=""
         for record in records:
                 texts=record.split("\t")
@@ -63,9 +68,11 @@ def load_data(fastafilename,classificationfilename,classificationlevel):
                 if classificationlevel < len(texts):
                         classname=texts[classificationlevel].rstrip()
                 if classname !="":
-                        allseqids.append(seqid)
+                        #allseqids.append(seqid)
                         classification.append(classname)
+                        classificationdict[seqid]=classname
         records.close()
+        print('  Done')#, len(allseqids))
         classificationset=set(classification)
         classes=list(classificationset)
         #load fastafile, save a new fasta file containing only sequences having a classification
@@ -77,18 +84,22 @@ def load_data(fastafilename,classificationfilename,classificationlevel):
         sequences=[]
         seqids=[]
         taxa=[]
-        for line in fastafile:
+        tic = time.time()
+        for i_l, line in enumerate(fastafile):
+                if i_l%5000==0:
+                        tac = time.time()
+                        print(i_l, tac-tic)
+                        tic = tac
                 if line.startswith(">"):
                         if writetofile==True:
                                 sequences.append(seq)
                         writetofile=False
                         seq=""
-                        seqid=line.split("|")[0].replace(">","").rstrip()               
-                        if seqid in allseqids:
-                                index=allseqids.index(seqid)
-                                taxonname=classification[index]
+                        seqid=line.split("|")[0].replace(">","").rstrip()
+                        #print(seqid)
+                        if seqid in classificationdict: 
+                                taxonname=classificationdict[seqid]
                                 if taxonname !="":
-                                        #write to file
                                         newfastafile.write(">" + seqid + "\n")
                                         seqids.append(seqid)
                                         taxa.append(taxonname)
@@ -107,24 +118,37 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
         #load matrix
         vectors= list(open(matrixfilename, "r"))
         vectors=vectors[1:]
+        print(len(vectors), 'vectors')
         X=[]
         Y=[]
         seqIDList=[]
         seqList=[]
+        seqidsdict = {}
+        for i_s, s in enumerate(seqids):
+                seqidsdict[s]=i_s
         for i in range(0,len(classes)):
                 seqIDList.append([])
                 seqList.append([])
-        for vector in vectors:
+        tic = time.time()
+        for i_v, vector in enumerate(vectors):
+                if i_v%5000==0:
+                        tac = time.time()
+                        print(i_v, tac-tic)
+                        tic = tac
+                #print(vector)
                 elements=vector.split(",")
                 seqid=elements[0]
-                taxonname= taxa[seqids.index(seqid)]
-                seq=sequences[seqids.index(seqid)]
+                #taxonname= taxa[seqids.index(seqid)]
+                taxonname = taxa[seqidsdict[seqid]]
+                #seq=sequences[seqids.index(seqid)]
+                seq = sequences[seqidsdict[seqid]]
                 index=classes.index(taxonname)
+                #print(seqid, taxonname, seq, index)
                 Y.append(index)
                 X.append(elements[1:])
-                if seqid not in seqIDList[index]:
-                        seqIDList[index].append(seqid)
-                        seqList[index].append(seq)
+                #if seqid not in seqIDList[index]:
+                        #seqIDList[index].append(seqid)
+                        #seqList[index].append(seq)
         X=np.array(X,dtype=float)
         Y=np.array(Y,dtype=int)
         data_max=0
@@ -215,24 +239,42 @@ if __name__ == "__main__":
         path=sys.argv[0]
         path=path[:-(len(path)-path.rindex("/")-1)]
         #load data
+        print('Loading FASTA data from', fastafilename, 'and')
+        print('classification data from', classificationfilename, classificationlevel)
         newfastafilename,seqids,sequences,taxa,classes,level = load_data(fastafilename,classificationfilename,classificationlevel)
         #represent sequences as matrix of k-mer frequencies
         filename=GetBase(fastafilename)
         matrixfilename=filename + "." + str(k) + ".matrix"
         command=path + "fasta2matrix.py " +  str(k) + " " + newfastafilename + " " + matrixfilename
+        print('Running command:', command)
         os.system(command)
+        print('Loading matrix data from', matrixfilename)
         X,Y,nb_classes,input_length,data_max,seqIDList,seqList = load_matrix(matrixfilename,seqids,sequences,taxa,classes)
+        #sys.exit()
         #train data
         trainids=np.array(range(0,len(X)),dtype=int)
         traindata=X[trainids]
         trainlabels=Y[trainids]
         #training
+        print('Creating data with nb_classes={}, input_length={}'.format(nb_classes, input_length))
         model = create_model(nb_classes,input_length)
         traindata = traindata.reshape(traindata.shape + (1,))
         trainlabels_bin=utils.to_categorical(trainlabels, nb_classes)
         print('Training data: X:', traindata.shape, 'Y:', trainlabels_bin.shape, 'actual classes:', len(np.unique(trainlabels)))
-        model.fit(traindata, trainlabels_bin, validation_split=0.2,
-                  epochs=10, batch_size=20, verbose = 2)
+        #model.fit(traindata, trainlabels_bin, validation_split=0.2,
+        #          epochs=10, batch_size=20, verbose = 2)
+        x_train, x_valid, y_train, y_valid = train_test_split(traindata, trainlabels_bin,
+                                                              test_size=0.2, shuffle=True)
+        model.fit(x_train, y_train, validation_data=(x_valid, y_valid),
+                  epochs=10, batch_size=20, verbose=2)
+        pred_train = np.argmax(model.predict(x_train), axis=1)
+        pred_valid = np.argmax(model.predict(x_valid), axis=1)
+        y_train = np.argmax(y_train, axis=1)
+        y_valid = np.argmax(y_valid, axis=1)
+        #print(y_train)
+        #print(pred_train)
+        print('Train: accuracy={}, mcc={}'.format(acc(y_train, pred_train), mcc(y_train, pred_train)))
+        print('Valid: accuracy={}, mcc={}'.format(acc(y_valid, pred_valid), mcc(y_valid, pred_valid)))
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
         if modelname==None or modelname=="":
@@ -255,4 +297,3 @@ if __name__ == "__main__":
         SaveConfig(configfilename,classifiername,fastafilename,jsonfilename,classificationfilename,classificationlevel,k,data_max)
         print("The classifier is saved in the folder " + modelname + ".")
         
-
