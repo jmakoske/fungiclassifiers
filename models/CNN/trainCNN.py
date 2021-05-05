@@ -121,6 +121,7 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
         print(len(vectors), 'vectors')
         X=[]
         Y=[]
+        S=[]
         seqIDList=[]
         seqList=[]
         seqidsdict = {}
@@ -141,11 +142,12 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
                 #taxonname= taxa[seqids.index(seqid)]
                 taxonname = taxa[seqidsdict[seqid]]
                 #seq=sequences[seqids.index(seqid)]
-                seq = sequences[seqidsdict[seqid]]
+                #seq = sequences[seqidsdict[seqid]]
                 index=classes.index(taxonname)
                 #print(seqid, taxonname, seq, index)
                 Y.append(index)
                 X.append(elements[1:])
+                S.append(seqid)
                 #if seqid not in seqIDList[index]:
                         #seqIDList[index].append(seqid)
                         #seqList[index].append(seq)
@@ -154,7 +156,7 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
         data_max=0
         #data_max= np.amax(X)
         #X = X/data_max
-        return X,Y,len(classes),len(X[0]),data_max,seqIDList,seqList
+        return X,Y,S,len(classes),len(X[0]),data_max,seqIDList,seqList
 
 def multi_mcc(y_true, y_pred):
         confusion_m = tf.matmul(K.transpose(y_true), y_pred)
@@ -249,22 +251,30 @@ if __name__ == "__main__":
         print('Running command:', command)
         os.system(command)
         print('Loading matrix data from', matrixfilename)
-        X,Y,nb_classes,input_length,data_max,seqIDList,seqList = load_matrix(matrixfilename,seqids,sequences,taxa,classes)
+        X,Y,S,nb_classes,input_length,data_max,seqIDList,seqList = load_matrix(matrixfilename,seqids,sequences,taxa,classes)
         #sys.exit()
         #train data
-        trainids=np.array(range(0,len(X)),dtype=int)
-        traindata=X[trainids]
-        trainlabels=Y[trainids]
-        #training
         print('Creating data with nb_classes={}, input_length={}'.format(nb_classes, input_length))
+        all_indices = np.array(range(0,len(X)),dtype=int)
+        train_indices, valid_indices = train_test_split(all_indices, test_size=0.2,
+                                                        shuffle=True, random_state=42)
+
+        print(len(all_indices), len(train_indices), len(valid_indices), len(X)) 
+        x_train = X[train_indices]
+        x_train = np.expand_dims(x_train, axis=2)
+        x_valid = X[valid_indices]
+        x_valid = np.expand_dims(x_valid, axis=2)
+
+        trainlabels = Y[train_indices]
+        y_train = utils.to_categorical(trainlabels, nb_classes)
+        y_valid = utils.to_categorical(Y[valid_indices], nb_classes)
+
+        print('Training data:   X:', x_train.shape, 'Y:', y_train.shape,
+              'actual classes:', len(np.unique(trainlabels)))
+        print('Validation data: X:', x_valid.shape, 'Y:', y_valid.shape)
+
+        #training
         model = create_model(nb_classes,input_length)
-        traindata = traindata.reshape(traindata.shape + (1,))
-        trainlabels_bin=utils.to_categorical(trainlabels, nb_classes)
-        print('Training data: X:', traindata.shape, 'Y:', trainlabels_bin.shape, 'actual classes:', len(np.unique(trainlabels)))
-        #model.fit(traindata, trainlabels_bin, validation_split=0.2,
-        #          epochs=10, batch_size=20, verbose = 2)
-        x_train, x_valid, y_train, y_valid = train_test_split(traindata, trainlabels_bin,
-                                                              test_size=0.2, shuffle=True)
         model.fit(x_train, y_train, validation_data=(x_valid, y_valid),
                   epochs=10, batch_size=20, verbose=2)
         pred_train = np.argmax(model.predict(x_train), axis=1)
