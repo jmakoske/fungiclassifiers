@@ -237,6 +237,12 @@ def SaveClasses(jsonfilename,classnames,seqIDList,seqList):
         with open(jsonfilename,"w") as json_file:
                 json.dump(taxadict,json_file) #,encoding='latin1')
 
+def SaveSequence(seqfilename, seqlist):
+        with open(seqfilename, 'w') as f:
+                for s in seqlist:
+                        f.write("{}\n".format(s))
+        print('Wrote', len(seqlist), 'sequences to', seqfilename)
+
 if __name__ == "__main__":
         path=sys.argv[0]
         path=path[:-(len(path)-path.rindex("/")-1)]
@@ -285,6 +291,7 @@ if __name__ == "__main__":
         #print(pred_train)
         print('Train: accuracy={}, mcc={}'.format(acc(y_train, pred_train), mcc(y_train, pred_train)))
         print('Valid: accuracy={}, mcc={}'.format(acc(y_valid, pred_valid), mcc(y_valid, pred_valid)))
+
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
         if modelname==None or modelname=="":
@@ -296,14 +303,20 @@ if __name__ == "__main__":
                 basename=modelname[modelname.rindex("/")+1:]
         if os.path.isdir(modelname) == False:
                 os.system("mkdir " + modelname)
+
+        #save train and valid sequences
+        SaveSequence(modelname + "/" + basename + ".train.txt",
+                     [S[i] for i in train_indices])
+        SaveSequence(modelname + "/" + basename + ".valid.txt",
+                     [S[i] for i in valid_indices])
+
         #save model
         classifiername=modelname + "/" + basename + ".classifier"
         model.save(classifiername)
         #save seqids for each classification
         jsonfilename=modelname + "/" + basename + ".classes"
         SaveClasses(jsonfilename,classes,seqIDList,seqList)
-        #save config    
+        #save config
         configfilename=modelname + "/" + basename + ".config"
         SaveConfig(configfilename,classifiername,fastafilename,jsonfilename,classificationfilename,classificationlevel,k,data_max)
         print("The classifier is saved in the folder " + modelname + ".")
-        
