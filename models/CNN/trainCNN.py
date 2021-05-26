@@ -14,6 +14,7 @@ from tensorflow.keras.layers import Dropout, Activation, Flatten
 from tensorflow.keras import utils
 from tensorflow.keras import backend as K
 from sklearn.model_selection import train_test_split
+from random import shuffle
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import matthews_corrcoef as mcc
 import numpy as np
@@ -31,6 +32,7 @@ parser.add_argument('-o','--out', help='The folder name containing the model and
 parser.add_argument('-c','--classification', required=True, help='the classification file in tab. format.')
 parser.add_argument('-p','--classificationpos', required=True, type=int, default=0, help='the classification position to load the classification.')
 parser.add_argument('-k','--kmer', type=int, default=6, help='the k-mer for the representation of the sequences.')
+parser.add_argument('-t','--traintest', type=str,  help='prefix for precomputed train and test sequences.')
 
 args=parser.parse_args()
 fastafilename= args.input
@@ -191,7 +193,7 @@ def create_model(nb_classes,input_length):
         model.add(Dense(nb_classes))
         model.add(Activation('softmax'))
         model.compile(optimizer='adam', loss='categorical_crossentropy',
-                      metrics=['accuracy', multi_mcc])
+                      metrics=['accuracy'])#, multi_mcc])
         print(model.summary())
         return model
 
@@ -260,12 +262,39 @@ if __name__ == "__main__":
         X,Y,S,nb_classes,input_length,data_max,seqIDList,seqList = load_matrix(matrixfilename,seqids,sequences,taxa,classes)
         #sys.exit()
         #train data
-        print('Creating data with nb_classes={}, input_length={}'.format(nb_classes, input_length))
         all_indices = np.array(range(0,len(X)),dtype=int)
-        train_indices, valid_indices = train_test_split(all_indices, test_size=0.2,
-                                                        shuffle=True, random_state=42)
+        if args.traintest is not None:
+                assert (os.path.isfile(args.traintest+"-train.txt") and
+                        os.path.isfile(args.traintest+"-test.txt"))
+                traindict = dict()
+                with open(args.traintest+"-train.txt") as tf:
+                        for line in tf.readlines():
+                                traindict[line.rstrip()] = True
+                validdict = dict()
+                with open(args.traintest+"-test.txt") as tf:
+                        for line in tf.readlines():
+                                validdict[line.rstrip()] = True
+                train_indices, valid_indices = list(), list()
+                for i_seq, seq in enumerate(S):
+                        if seq in traindict:
+                                train_indices.append(i_seq)
+                        elif seq in validdict:
+                                valid_indices.append(i_seq)
+                        else:
+                                print('WARNING: {}: {} not found in either '
+                                      'train or test set'.format(i_seq, seq))
+                shuffle(train_indices)
+                shuffle(valid_indices)
+                train_indices, valid_indices = np.array(train_indices), np.array(valid_indices)
+        else:
+                train_indices, valid_indices = train_test_split(all_indices, test_size=0.2,
+                                                                shuffle=True, random_state=42)
 
-        print(len(all_indices), len(train_indices), len(valid_indices), len(X)) 
+        print('Creating data with nb_classes={}, input_length={}'.format(nb_classes, input_length))
+        print(len(all_indices), len(train_indices), len(valid_indices), len(X))
+        print(train_indices)
+        print(valid_indices)
+        #sys.exit()
         x_train = X[train_indices]
         x_train = np.expand_dims(x_train, axis=2)
         x_valid = X[valid_indices]
@@ -274,6 +303,8 @@ if __name__ == "__main__":
         trainlabels = Y[train_indices]
         y_train = utils.to_categorical(trainlabels, nb_classes)
         y_valid = utils.to_categorical(Y[valid_indices], nb_classes)
+        #print(y_train.shape, type(y_train), np.sum(y_train,axis=0), np.sum(y_train,axis=1), y_train)
+        #sys.exit()
 
         print('Training data:   X:', x_train.shape, 'Y:', y_train.shape,
               'actual classes:', len(np.unique(trainlabels)))
@@ -287,10 +318,6 @@ if __name__ == "__main__":
         pred_valid = np.argmax(model.predict(x_valid), axis=1)
         y_train = np.argmax(y_train, axis=1)
         y_valid = np.argmax(y_valid, axis=1)
-        #print(y_train)
-        #print(pred_train)
-        print('Train: accuracy={}, mcc={}'.format(acc(y_train, pred_train), mcc(y_train, pred_train)))
-        print('Valid: accuracy={}, mcc={}'.format(acc(y_valid, pred_valid), mcc(y_valid, pred_valid)))
 
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
@@ -303,6 +330,15 @@ if __name__ == "__main__":
                 basename=modelname[modelname.rindex("/")+1:]
         if os.path.isdir(modelname) == False:
                 os.system("mkdir " + modelname)
+
+        #save results
+        res_train = 'Train: accuracy={}, mcc={}'.format(acc(y_train, pred_train), mcc(y_train, pred_train))
+        res_valid = 'Valid: accuracy={}, mcc={}'.format(acc(y_valid, pred_valid), mcc(y_valid, pred_valid))
+        with open(modelname + "/" + basename + ".results.txt", 'w') as f:
+                f.write("{}\n".format(res_train))
+                f.write("{}\n".format(res_valid))
+        print(res_train)
+        print(res_valid)
 
         #save train and valid sequences
         SaveSequence(modelname + "/" + basename + ".train.txt",
