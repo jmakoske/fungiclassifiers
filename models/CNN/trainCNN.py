@@ -245,6 +245,14 @@ def SaveSequence(seqfilename, seqlist):
                         f.write("{}\n".format(s))
         print('Wrote', len(seqlist), 'sequences to', seqfilename)
 
+def SaveProbabilities(probfilename, y_true, y_pred, probs):
+        with open(probfilename, 'w') as f:
+                assert len(y_true)==len(y_pred)
+                assert len(y_true)==len(probs)
+                for i, y in enumerate(y_true):
+                        f.write("{},{},{}\n".format(y_true[i], y_pred[i], probs[i]))
+        print('Wrote', len(y_true), 'probabilities to', probfilename)
+
 if __name__ == "__main__":
         path=sys.argv[0]
         path=path[:-(len(path)-path.rindex("/")-1)]
@@ -314,15 +322,20 @@ if __name__ == "__main__":
         model = create_model(nb_classes,input_length)
         model.fit(x_train, y_train, validation_data=(x_valid, y_valid),
                   epochs=10, batch_size=20, verbose=2)
-        pred_train = np.argmax(model.predict(x_train), axis=1)
-        pred_valid = np.argmax(model.predict(x_valid), axis=1)
+        predictions_train = model.predict(x_train)
+        predictions_valid = model.predict(x_valid)
+        pred_train = np.argmax(predictions_train, axis=1)
+        pred_valid = np.argmax(predictions_valid, axis=1)
+        prob_train = np.max(predictions_train, axis=1)
+        prob_valid = np.max(predictions_valid, axis=1)
         y_train = np.argmax(y_train, axis=1)
         y_valid = np.argmax(y_valid, axis=1)
+
 
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
         if modelname==None or modelname=="":
-                modelname=filename.replace(".","_") + "_cnn_classifier" 
+                modelname=filename.replace(".","_") + "_cnn_classifier"
                 if level !="":
                         modelname=filename + "_" + level + "_cnn_classifier"
         basename=modelname
@@ -345,6 +358,12 @@ if __name__ == "__main__":
                      [S[i] for i in train_indices])
         SaveSequence(modelname + "/" + basename + ".valid.txt",
                      [S[i] for i in valid_indices])
+
+        #save probabilities
+        SaveProbabilities(modelname + "/" + basename + ".probs.train.txt",
+                          y_train, pred_train, prob_train)
+        SaveProbabilities(modelname + "/" + basename + ".probs.valid.txt",
+                          y_valid, pred_valid, prob_valid)
 
         #save model
         classifiername=modelname + "/" + basename + ".classifier"
