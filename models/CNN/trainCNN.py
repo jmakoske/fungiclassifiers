@@ -7,7 +7,7 @@ import sys
 #        unicode = str
 import os, argparse
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense, InputLayer
 from tensorflow.keras.layers import Convolution1D, MaxPooling1D
 from tensorflow.keras.layers import Dropout, Activation, Flatten
@@ -33,6 +33,7 @@ parser.add_argument('-c','--classification', required=True, help='the classifica
 parser.add_argument('-p','--classificationpos', required=True, type=int, default=0, help='the classification position to load the classification.')
 parser.add_argument('-k','--kmer', type=int, default=6, help='the k-mer for the representation of the sequences.')
 parser.add_argument('-t','--traintest', type=str,  help='prefix for precomputed train and test sequences.')
+parser.add_argument('-l','--loadmodel', type=str,  metavar='FILE', help='load pretrained model from FILE.')
 
 args=parser.parse_args()
 fastafilename= args.input
@@ -77,6 +78,7 @@ def load_data(fastafilename,classificationfilename,classificationlevel):
         print('  Done')#, len(allseqids))
         classificationset=set(classification)
         classes=list(classificationset)
+        classes.sort()
         #load fastafile, save a new fasta file containing only sequences having a classification
         fastafile=open(fastafilename)
         newfastafilename=GetBase(fastafilename) + "." + str(classificationlevel) + ".fasta"
@@ -319,9 +321,15 @@ if __name__ == "__main__":
         print('Validation data: X:', x_valid.shape, 'Y:', y_valid.shape)
 
         #training
-        model = create_model(nb_classes,input_length)
-        model.fit(x_train, y_train, validation_data=(x_valid, y_valid),
-                  epochs=10, batch_size=20, verbose=2)
+        if args.loadmodel is None:
+                model = create_model(nb_classes,input_length)
+                model.fit(x_train, y_train, validation_data=(x_valid, y_valid),
+                          epochs=10, batch_size=20, verbose=2)
+        else:
+                print('Loading model from', args.loadmodel)
+                model = load_model(args.loadmodel)
+                print(model.summary())
+
         predictions_train = model.predict(x_train)
         predictions_valid = model.predict(x_valid)
         pred_train = np.argmax(predictions_train, axis=1)
@@ -330,7 +338,6 @@ if __name__ == "__main__":
         prob_valid = np.max(predictions_valid, axis=1)
         y_train = np.argmax(y_train, axis=1)
         y_valid = np.argmax(y_valid, axis=1)
-
 
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
@@ -366,12 +373,13 @@ if __name__ == "__main__":
                           y_valid, pred_valid, prob_valid)
 
         #save model
-        classifiername=modelname + "/" + basename + ".classifier"
-        model.save(classifiername)
-        #save seqids for each classification
-        jsonfilename=modelname + "/" + basename + ".classes"
-        SaveClasses(jsonfilename,classes,seqIDList,seqList)
-        #save config
-        configfilename=modelname + "/" + basename + ".config"
-        SaveConfig(configfilename,classifiername,fastafilename,jsonfilename,classificationfilename,classificationlevel,k,data_max)
-        print("The classifier is saved in the folder " + modelname + ".")
+        if args.loadmodel is None:
+                classifiername=modelname + "/" + basename + ".classifier"
+                model.save(classifiername)
+                #save seqids for each classification
+                jsonfilename=modelname + "/" + basename + ".classes"
+                SaveClasses(jsonfilename,classes,seqIDList,seqList)
+                #save config
+                configfilename=modelname + "/" + basename + ".config"
+                SaveConfig(configfilename,classifiername,fastafilename,jsonfilename,classificationfilename,classificationlevel,k,data_max)
+                print("The classifier is saved in the folder " + modelname + ".")
