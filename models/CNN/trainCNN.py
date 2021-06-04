@@ -90,7 +90,7 @@ def load_data(fastafilename,classificationfilename,classificationlevel):
         taxa=[]
         tic = time.time()
         for i_l, line in enumerate(fastafile):
-                if i_l%5000==0:
+                if i_l%10000==0:
                         tac = time.time()
                         print(i_l, tac-tic)
                         tic = tac
@@ -136,7 +136,7 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
                 seqList.append([])
         tic = time.time()
         for i_v, vector in enumerate(vectors):
-                if i_v%5000==0:
+                if i_v%10000==0:
                         tac = time.time()
                         print(i_v, tac-tic)
                         tic = tac
@@ -248,9 +248,11 @@ def SaveSequence(seqfilename, seqlist):
         print('Wrote', len(seqlist), 'sequences to', seqfilename)
 
 def SaveProbabilities(probfilename, y_true, y_pred, probs):
+        if len(y_true) == 0:
+                return
+        assert len(y_true)==len(y_pred)
+        assert len(y_true)==len(probs)
         with open(probfilename, 'w') as f:
-                assert len(y_true)==len(y_pred)
-                assert len(y_true)==len(probs)
                 for i, y in enumerate(y_true):
                         f.write("{},{},{}\n".format(y_true[i], y_pred[i], probs[i]))
         print('Wrote', len(y_true), 'probabilities to', probfilename)
@@ -259,6 +261,7 @@ if __name__ == "__main__":
         path=sys.argv[0]
         path=path[:-(len(path)-path.rindex("/")-1)]
         #load data
+        preproc_tic = time.time()
         print('Loading FASTA data from', fastafilename, 'and')
         print('classification data from', classificationfilename, classificationlevel)
         newfastafilename,seqids,sequences,taxa,classes,level = load_data(fastafilename,classificationfilename,classificationlevel)
@@ -305,39 +308,63 @@ if __name__ == "__main__":
         print(train_indices)
         print(valid_indices)
         #sys.exit()
-        x_train = X[train_indices]
-        x_train = np.expand_dims(x_train, axis=2)
-        x_valid = X[valid_indices]
-        x_valid = np.expand_dims(x_valid, axis=2)
 
-        trainlabels = Y[train_indices]
-        y_train = utils.to_categorical(trainlabels, nb_classes)
-        y_valid = utils.to_categorical(Y[valid_indices], nb_classes)
-        #print(y_train.shape, type(y_train), np.sum(y_train,axis=0), np.sum(y_train,axis=1), y_train)
+        if len(train_indices):
+                x_train = X[train_indices]
+                x_train = np.expand_dims(x_train, axis=2)
+                trainlabels = Y[train_indices]
+                y_train = utils.to_categorical(trainlabels, nb_classes)
+        else:
+                x_train, y_train, trainlabels = np.array([]), np.array([]), np.array([])
+
+        if len(valid_indices):
+                x_valid = X[valid_indices]
+                x_valid = np.expand_dims(x_valid, axis=2)
+                y_valid = utils.to_categorical(Y[valid_indices], nb_classes)
+        else:
+                x_valid, y_valid = np.array([]), np.array([])
+
         #sys.exit()
 
         print('Training data:   X:', x_train.shape, 'Y:', y_train.shape,
               'actual classes:', len(np.unique(trainlabels)))
         print('Validation data: X:', x_valid.shape, 'Y:', y_valid.shape)
+        preproc_tac = time.time()
 
         #training
+        model_tic = time.time()
         if args.loadmodel is None:
                 model = create_model(nb_classes,input_length)
+                assert len(x_train)
                 model.fit(x_train, y_train, validation_data=(x_valid, y_valid),
                           epochs=10, batch_size=20, verbose=2)
         else:
                 print('Loading model from', args.loadmodel)
                 model = load_model(args.loadmodel)
                 print(model.summary())
+        model_tac = time.time()
 
-        predictions_train = model.predict(x_train)
-        predictions_valid = model.predict(x_valid)
-        pred_train = np.argmax(predictions_train, axis=1)
-        pred_valid = np.argmax(predictions_valid, axis=1)
-        prob_train = np.max(predictions_train, axis=1)
-        prob_valid = np.max(predictions_valid, axis=1)
-        y_train = np.argmax(y_train, axis=1)
-        y_valid = np.argmax(y_valid, axis=1)
+        pred_tic = time.time()
+        if len(train_indices):
+                predictions_train = model.predict(x_train)
+                pred_train = np.argmax(predictions_train, axis=1)
+                prob_train = np.max(predictions_train, axis=1)
+                y_train = np.argmax(y_train, axis=1)
+        else:
+                pred_train, prob_train = np.array(None), np.array(None)
+
+        if len(valid_indices):
+                predictions_valid = model.predict(x_valid)
+                pred_valid = np.argmax(predictions_valid, axis=1)
+                prob_valid = np.max(predictions_valid, axis=1)
+                y_valid = np.argmax(y_valid, axis=1)
+        else:
+                pred_valid, prob_valid = np.array(None), np.array(None)
+        pred_tac = time.time()
+
+        print('Preprocessing:   ', preproc_tac-preproc_tic, 'seconds')
+        print('Model load/train:', model_tac-model_tic, 'seconds')
+        print('Prediction:      ', pred_tac-pred_tic, 'seconds')
 
         #save model
 #       modelname=filename.replace(".","_") + "_cnn_classifier"
@@ -352,8 +379,16 @@ if __name__ == "__main__":
                 os.system("mkdir " + modelname)
 
         #save results
-        res_train = 'Train: accuracy={}, mcc={}'.format(acc(y_train, pred_train), mcc(y_train, pred_train))
-        res_valid = 'Valid: accuracy={}, mcc={}'.format(acc(y_valid, pred_valid), mcc(y_valid, pred_valid))
+        if len(train_indices):
+                res_train = 'Train: accuracy={}, mcc={}'.format(acc(y_train, pred_train),
+                                                                mcc(y_train, pred_train))
+        else:
+                res_train = "Train: N/A"
+        if len(valid_indices):
+                res_valid = 'Valid: accuracy={}, mcc={}'.format(acc(y_valid, pred_valid),
+                                                                mcc(y_valid, pred_valid))
+        else:
+                res_valid = "Valid: N/A"
         with open(modelname + "/" + basename + ".results.txt", 'w') as f:
                 f.write("{}\n".format(res_train))
                 f.write("{}\n".format(res_valid))
@@ -361,10 +396,12 @@ if __name__ == "__main__":
         print(res_valid)
 
         #save train and valid sequences
-        SaveSequence(modelname + "/" + basename + ".train.txt",
-                     [S[i] for i in train_indices])
-        SaveSequence(modelname + "/" + basename + ".valid.txt",
-                     [S[i] for i in valid_indices])
+        if len(train_indices):
+                SaveSequence(modelname + "/" + basename + ".train.txt",
+                             [S[i] for i in train_indices])
+        if len(valid_indices):
+                SaveSequence(modelname + "/" + basename + ".valid.txt",
+                             [S[i] for i in valid_indices])
 
         #save probabilities
         SaveProbabilities(modelname + "/" + basename + ".probs.train.txt",
