@@ -126,6 +126,7 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
         X=[]
         Y=[]
         S=[]
+        T=[]
         seqIDList=[]
         seqList=[]
         seqidsdict = {}
@@ -152,6 +153,7 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
                 Y.append(index)
                 X.append(elements[1:])
                 S.append(seqid)
+                T.append(taxonname)
                 #if seqid not in seqIDList[index]:
                         #seqIDList[index].append(seqid)
                         #seqList[index].append(seq)
@@ -160,7 +162,7 @@ def load_matrix(matrixfilename,seqids,sequences,taxa,classes):
         data_max=0
         #data_max= np.amax(X)
         #X = X/data_max
-        return X,Y,S,len(classes),len(X[0]),data_max,seqIDList,seqList
+        return X,Y,S,T,len(classes),len(X[0]),data_max,seqIDList,seqList
 
 def multi_mcc(y_true, y_pred):
         confusion_m = tf.matmul(K.transpose(y_true), y_pred)
@@ -247,14 +249,16 @@ def SaveSequence(seqfilename, seqlist):
                         f.write("{}\n".format(s))
         print('Wrote', len(seqlist), 'sequences to', seqfilename)
 
-def SaveProbabilities(probfilename, y_true, y_pred, probs):
+def SaveProbabilities(probfilename, C, y_true, y_pred, probs):
         if len(y_true) == 0:
                 return
         assert len(y_true)==len(y_pred)
         assert len(y_true)==len(probs)
         with open(probfilename, 'w') as f:
                 for i, y in enumerate(y_true):
-                        f.write("{},{},{}\n".format(y_true[i], y_pred[i], probs[i]))
+                        f.write("{},{},{},{},{}\n".format(y_true[i], y_pred[i],
+                                                    C[y_true[i]], C[y_pred[i]],
+                                                    probs[i]))
         print('Wrote', len(y_true), 'probabilities to', probfilename)
 
 if __name__ == "__main__":
@@ -272,7 +276,7 @@ if __name__ == "__main__":
         print('Running command:', command)
         os.system(command)
         print('Loading matrix data from', matrixfilename)
-        X,Y,S,nb_classes,input_length,data_max,seqIDList,seqList = load_matrix(matrixfilename,seqids,sequences,taxa,classes)
+        X,Y,S,T,nb_classes,input_length,data_max,seqIDList,seqList = load_matrix(matrixfilename,seqids,sequences,taxa,classes)
         #sys.exit()
         #train data
         all_indices = np.array(range(0,len(X)),dtype=int)
@@ -288,14 +292,20 @@ if __name__ == "__main__":
                         for line in tf.readlines():
                                 validdict[line.rstrip()] = True
                 train_indices, valid_indices = list(), list()
+                n_missing = 0
                 for i_seq, seq in enumerate(S):
                         if seq in traindict:
                                 train_indices.append(i_seq)
                         elif seq in validdict:
                                 valid_indices.append(i_seq)
                         else:
+                                n_missing = n_missing + 1
                                 print('WARNING: {}: {} not found in either '
                                       'train or test set'.format(i_seq, seq))
+                if n_missing > 0:
+                        print('WARNING: In total {} sequences were not found '
+                              'in either train or test set'.format(n_missing))
+
                 shuffle(train_indices)
                 shuffle(valid_indices)
                 train_indices, valid_indices = np.array(train_indices), np.array(valid_indices)
@@ -404,10 +414,10 @@ if __name__ == "__main__":
                              [S[i] for i in valid_indices])
 
         #save probabilities
-        SaveProbabilities(modelname + "/" + basename + ".probs.train.txt",
-                          y_train, pred_train, prob_train)
-        SaveProbabilities(modelname + "/" + basename + ".probs.valid.txt",
-                          y_valid, pred_valid, prob_valid)
+        SaveProbabilities(modelname + "/" + basename + ".probsnew.train.txt",
+                          classes, y_train, pred_train, prob_train)
+        SaveProbabilities(modelname + "/" + basename + ".probsnew.valid.txt",
+                          classes, y_valid, pred_valid, prob_valid)
 
         #save model
         if args.loadmodel is None:
