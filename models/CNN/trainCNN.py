@@ -317,7 +317,20 @@ if __name__ == "__main__":
         print(len(all_indices), len(train_indices), len(valid_indices), len(X))
         print(train_indices)
         print(valid_indices)
-        #sys.exit()
+        if 0: # this is just to save processed input files only
+                basename=modelname
+                if "/" in modelname:
+                        basename=modelname[modelname.rindex("/")+1:]
+                if os.path.isdir(modelname) == False:
+                        os.system("mkdir " + modelname)
+                if len(train_indices):
+                        SaveSequence(modelname + "/" + basename + ".train.txt",
+                                     [S[i] for i in train_indices])
+                if len(valid_indices):
+                        SaveSequence(modelname + "/" + basename + ".valid.txt",
+                                     [S[i] for i in valid_indices])
+                print('Only saving input files and exiting')
+                sys.exit()
 
         if len(train_indices):
                 x_train = X[train_indices]
